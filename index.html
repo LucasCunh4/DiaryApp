@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Livros PWA</title>
+    <meta name="theme-color" content="#5a412e"/>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Caveat:wght@400..700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div id="pin-lock-screen" class="pin-lock-screen">
+        <div class="pin-container">
+            <h2>Digite seu PIN</h2>
+            <div id="pin-display" class="pin-display"></div>
+            <div class="pin-keypad">
+                <button class="key">1</button> <button class="key">2</button> <button class="key">3</button>
+                <button class="key">4</button> <button class="key">5</button> <button class="key">6</button>
+                <button class="key">7</button> <button class="key">8</button> <button class="key">9</button>
+                <button class="key" id="pin-clear">C</button> <button class="key">0</button> <button class="key" id="pin-backspace">⌫</button>
+            </div>
+        </div>
+    </div>
+
+    <nav id="drawer" class="drawer">
+        <div class="drawer-header">
+            <h2>Meus Livros</h2>
+        </div>
+        <div class="drawer-content">
+            <ul id="book-list">
+                </ul>
+            
+            <details class="settings-accordion">
+                <summary>Configurações</summary>
+                <div class="settings-content">
+                    <div class="new-book-container">
+                        <input type="text" id="new-book-name" placeholder="Nome do novo livro...">
+                        <button id="add-book-btn">Criar Livro</button>
+                    </div>
+                    <div class="search-container">
+                        <input type="search" id="search-input" placeholder="Buscar em todas as notas...">
+                        <ul id="search-results"></ul>
+                    </div>
+                    <div class="setting-toggle">
+                        <label for="emoji-toggle">Habilitar Emojis de Humor</label>
+                        <label class="switch">
+                            <input type="checkbox" id="emoji-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="theme-selector">
+                        <p>Tema:</p>
+                        <div class="themes">
+                            <div class="theme-swatch classic" data-theme="theme-classic" title="Clássico"></div>
+                            <div class="theme-swatch ocean" data-theme="theme-ocean" title="Oceano"></div>
+                            <div class="theme-swatch forest" data-theme="theme-forest" title="Floresta"></div>
+                            <div class="theme-swatch rose" data-theme="theme-rose" title="Rosa"></div>
+                        </div>
+                    </div>
+                    <button class="settings-btn" id="pin-settings-btn">Definir/Alterar PIN</button>
+                    <button class="settings-btn" id="export-btn">Exportar Backup</button>
+                    <button class="settings-btn" id="import-btn">Importar Backup</button>
+                    <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <main id="main-content">
+        <header>
+            <button id="menu-btn" class="menu-btn">☰</button>
+            <h1 id="current-book-title">Meu Livro</h1>
+        </header>
+
+        <div class="app-container">
+            <div id="book-container" class="book-container">
+                <div id="cover" class="cover">
+                    <div class="cover-main">
+                        <h2 id="book-cover-title">Meu Livro</h2>
+                        <p>Toque para abrir</p>
+                    </div>
+                    <div id="emoji-stats" class="emoji-stats"></div>
+                </div>
+
+                <div id="page" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h3 class="page-date" id="page-date"></h3>
+                        <div class="mood-display" id="page-mood"></div>
+                    </div>
+                    <textarea id="page-content" class="page-content"></textarea>
+                    <div class="mood-tracker">
+                        <p>Humor:</p>
+                        <div class="mood-options">
+                            <span class="mood" data-mood="😄">😄</span>
+                            <span class="mood" data-mood="😊">😊</span>
+                            <span class="mood" data-mood="😐">😐</span>
+                            <span class="mood" data-mood="😔">😔</span>
+                            <span class="mood" data-mood="😠">😠</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="navigation-controls" class="navigation-controls" style="display: none;">
+                <button id="prev-page-btn">‹ Anterior</button>
+                <button id="next-page-btn">Próxima ›</button>
+            </div>
+        </div>
+    </main>
+
+    <div id="overlay" class="overlay"></div>
+    
+    <div id="modal-overlay" class="modal-overlay">
+        <div id="modal" class="modal">
+            <h3 id="modal-title">Título do Modal</h3>
+            <p id="modal-text">Texto do modal...</p>
+            <input type="text" id="modal-input" class="modal-input" placeholder="Digite aqui...">
+            <div id="modal-buttons" class="modal-buttons">
+                <button id="modal-cancel-btn" class="modal-btn secondary">Cancelar</button>
+                <button id="modal-ok-btn" class="modal-btn primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
