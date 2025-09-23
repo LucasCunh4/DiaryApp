@@ -7,7 +7,8 @@
     <meta name="theme-color" content="#5a412e"/>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <link rel="icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Caveat:wght@400..700&display=swap" rel="stylesheet">
@@ -45,13 +46,6 @@
                     <div class="search-container">
                         <input type="search" id="search-input" placeholder="Buscar em todas as notas...">
                         <ul id="search-results"></ul>
-                    </div>
-                    <div class="setting-toggle">
-                        <label for="emoji-toggle">Habilitar Emojis de Humor</label>
-                        <label class="switch">
-                            <input type="checkbox" id="emoji-toggle">
-                            <span class="slider round"></span>
-                        </label>
                     </div>
                     <div class="theme-selector">
                         <p>Tema:</p>
@@ -93,7 +87,7 @@
                         <div class="mood-display" id="page-mood"></div>
                     </div>
                     <textarea id="page-content" class="page-content"></textarea>
-                    <div class="mood-tracker">
+                    <div id="mood-tracker" class="mood-tracker">
                         <p>Humor:</p>
                         <div class="mood-options">
                             <span class="mood" data-mood="😄">😄</span>
