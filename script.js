@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const newBookNameInput = document.getElementById('new-book-name');
     const addBookBtn = document.getElementById('add-book-btn');
     const moodOptions = document.querySelector('.mood-options');
+    const moodTrackerEl = document.getElementById('mood-tracker');
     const themeSwatches = document.querySelectorAll('.theme-swatch');
     const pinLockScreen = document.getElementById('pin-lock-screen');
     const pinDisplay = document.getElementById('pin-display');
@@ -29,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const importFileInput = document.getElementById('import-file-input');
     const searchInput = document.getElementById('search-input');
     const searchResultsEl = document.getElementById('search-results');
-    const emojiToggle = document.getElementById('emoji-toggle');
     const emojiStatsEl = document.getElementById('emoji-stats');
     const modalOverlay = document.getElementById('modal-overlay');
     const modalEl = document.getElementById('modal');
@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- ESTADO DA APLICAÇÃO ---
     let db;
     let currentBookId = localStorage.getItem('currentBookId') || null;
+    let currentBookData = null; // Armazena os dados do livro atual, incluindo a config de emoji
     let currentDate = new Date();
     let currentMood = null;
     let pinInput = '';
@@ -92,18 +93,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- INICIALIZAÇÃO E DB ---
     function initDB() {
-        const request = indexedDB.open('DiarioPWA_DB', 2);
+        const request = indexedDB.open('DiarioPWA_DB', 3); // <-- VERSÃO ATUALIZADA
         request.onerror = (event) => {
             console.error('Erro ao abrir o banco de dados:', event.target.error);
         };
         request.onupgradeneeded = (event) => {
             db = event.target.result;
-            if (!db.objectStoreNames.contains('diaries')) {
+            const oldVersion = event.oldVersion;
+            const transaction = event.target.transaction;
+            
+            if (oldVersion < 1) {
                 db.createObjectStore('diaries', { keyPath: 'id', autoIncrement: true });
             }
-            if (!db.objectStoreNames.contains('entries')) {
-                const entriesStore = db.createObjectStore('entries', { keyPath: ['diaryId', 'date'] });
-                entriesStore.createIndex('diaryId_idx', 'diaryId', { unique: false });
+            if (oldVersion < 2) {
+                if (!db.objectStoreNames.contains('entries')) {
+                    const entriesStore = db.createObjectStore('entries', { keyPath: ['diaryId', 'date'] });
+                    entriesStore.createIndex('diaryId_idx', 'diaryId', { unique: false });
+                }
+            }
+            if (oldVersion < 3) {
+                // Adiciona a propriedade emojisEnabled para livros existentes
+                const diariesStore = transaction.objectStore('diaries');
+                diariesStore.openCursor().onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        const book = cursor.value;
+                        book.emojisEnabled = true; // Habilita por padrão para livros antigos
+                        cursor.update(book);
+                        cursor.continue();
+                    }
+                };
             }
         };
         request.onsuccess = (event) => {
@@ -115,7 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function initialLoad() {
         loadBooks();
         setupTheme();
-        setupEmojiToggle();
         setupEventListeners();
     }
 
@@ -140,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-book-btn';
-            deleteBtn.innerHTML = '&#128465;'; // Ícone de lixeira
+            deleteBtn.innerHTML = '&#128465;';
             deleteBtn.title = `Excluir livro "${book.name}"`;
             deleteBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -168,9 +186,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function addBook(name) {
-        if (!db || !name.trim()) return;
+        const bookName = name.trim();
+        if (!db || !bookName) return;
+
+        const emojisEnabled = await customConfirm("Deseja habilitar o registro de humor (emojis) para este livro?", "Novo Livro");
+
         const transaction = db.transaction('diaries', 'readwrite');
-        const newBook = { name: name.trim() };
+        const newBook = { 
+            name: bookName,
+            emojisEnabled: emojisEnabled 
+        };
         await new Promise(r => transaction.objectStore('diaries').add(newBook).onsuccess = e => {
             currentBookId = e.target.result;
             newBookNameInput.value = '';
@@ -215,10 +240,12 @@ document.addEventListener('DOMContentLoaded', () => {
     async function selectBook(id) {
         currentBookId = id;
         localStorage.setItem('currentBookId', id);
-        const book = await new Promise(r => db.transaction('diaries').objectStore('diaries').get(Number(id)).onsuccess = e => r(e.target.result));
-        if (book) {
-            bookCoverTitle.textContent = book.name;
-            currentBookTitle.textContent = book.name;
+        
+        currentBookData = await new Promise(r => db.transaction('diaries').objectStore('diaries').get(Number(id)).onsuccess = e => r(e.target.result));
+        
+        if (currentBookData) {
+            bookCoverTitle.textContent = currentBookData.name;
+            currentBookTitle.textContent = currentBookData.name;
             calculateEmojiStats(id).then(displayEmojiStats);
         }
         document.querySelectorAll('#book-list li').forEach(li => li.classList.toggle('active', li.dataset.id == id));
@@ -233,9 +260,14 @@ document.addEventListener('DOMContentLoaded', () => {
         pageMoodEl.textContent = entry ? entry.mood || '' : '';
         updateMoodSelection(entry ? entry.mood : null);
         
+        // Controla a visibilidade dos emojis baseado na configuração do livro
+        const showEmojis = currentBookData && currentBookData.emojisEnabled;
+        moodTrackerEl.style.display = showEmojis ? 'block' : 'none';
+        pageMoodEl.style.display = showEmojis ? 'block' : 'none';
+        emojiStatsEl.style.display = showEmojis ? 'flex' : 'none';
+
         const isFuture = isDateInFuture(date);
         pageContentEl.disabled = isFuture;
-        moodOptions.style.visibility = isFuture ? 'hidden' : 'visible';
         
         await updateNavButtons();
     }
@@ -267,6 +299,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function displayEmojiStats(stats) {
         emojiStatsEl.innerHTML = '';
+        if (currentBookData && !currentBookData.emojisEnabled) {
+            return;
+        }
+
         const sortedEmojis = Object.entries(stats).sort(([,a],[,b]) => b-a);
         if (sortedEmojis.length === 0) {
             const emptySpan = document.createElement('span');
@@ -281,59 +317,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function findLastWrittenPage(bookId) {
-        return new Promise((resolve) => {
-            if (!bookId) { resolve(null); return; }
-            const transaction = db.transaction('entries', 'readonly');
-            const store = transaction.objectStore('entries');
-            const range = IDBKeyRange.bound([Number(bookId), ''], [Number(bookId), 'z']);
-            const request = store.openCursor(range, 'prev');
-            let found = false;
-            request.onsuccess = event => {
-                const cursor = event.target.result;
-                if (cursor) {
-                    const entry = cursor.value;
-                    if (entry.content && entry.content.trim() !== '') {
-                        found = true;
-                        resolve(new Date(entry.date.replace(/-/g, '/')));
-                    } else {
-                        cursor.continue();
-                    }
-                } else if (!found) { resolve(null); }
-            };
-            request.onerror = () => resolve(null);
-        });
-    }
-
-    function findFirstWrittenPage(bookId) {
-        return new Promise((resolve) => {
-            if (!bookId) { resolve(null); return; }
-            const transaction = db.transaction('entries', 'readonly');
-            const store = transaction.objectStore('entries');
-            const range = IDBKeyRange.bound([Number(bookId), ''], [Number(bookId), 'z']);
-            const request = store.openCursor(range, 'next');
-            let found = false;
-            request.onsuccess = event => {
-                const cursor = event.target.result;
-                if (cursor) {
-                    const entry = cursor.value;
-                    if (entry.content && entry.content.trim() !== '') {
-                        found = true;
-                        resolve(new Date(entry.date.replace(/-/g, '/')));
-                    } else { cursor.continue(); }
-                } else if (!found) { resolve(null); }
-            };
-            request.onerror = () => resolve(null);
-        });
-    }
-
     async function openBook() {
         if (!currentBookId) {
             await customAlert("Crie ou selecione um livro primeiro.");
             return;
         }
-        const lastDate = await findLastWrittenPage(currentBookId);
-        currentDate = lastDate || new Date();
+        
+        currentDate = new Date(); // Sempre abre no dia de hoje
         
         await loadPage(currentDate);
         
@@ -364,13 +354,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function updateNavButtons() {
-        nextPageBtn.disabled = isToday(currentDate);
-        const firstWrittenDate = await findFirstWrittenPage(currentBookId);
-        const limitDate = firstWrittenDate || new Date();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         const currentDay = new Date(currentDate);
         currentDay.setHours(0, 0, 0, 0);
+
+        // O botão "Próxima" é desabilitado se a página atual for hoje ou um dia futuro.
+        nextPageBtn.disabled = currentDay >= today;
+
+        const firstWrittenDate = await findFirstWrittenPage(currentBookId);
+        const limitDate = firstWrittenDate || new Date();
         const limitDay = new Date(limitDate);
         limitDay.setHours(0, 0, 0, 0);
+        
         prevPageBtn.disabled = currentDay <= limitDay;
     }
     
@@ -383,22 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function setupEmojiToggle() {
-        const areEmojisEnabled = localStorage.getItem('emojis_enabled') !== 'false';
-        emojiToggle.checked = areEmojisEnabled;
-        toggleEmojiVisibility(areEmojisEnabled);
-    }
-
-    function toggleEmojiVisibility(isEnabled) {
-        if (isEnabled) {
-            body.classList.remove('emojis-disabled');
-            localStorage.setItem('emojis_enabled', 'true');
-        } else {
-            body.classList.add('emojis-disabled');
-            localStorage.setItem('emojis_enabled', 'false');
-        }
-    }
-
+    // --- FUNÇÕES DE DADOS E UTILITÁRIAS ---
     function getEntry(date) {
         return new Promise((resolve) => {
             const dateString = date.toISOString().split('T')[0];
@@ -415,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const entry = { diaryId: Number(currentBookId), date: dateString, content: content, mood: currentMood };
         db.transaction('entries', 'readwrite').objectStore('entries').put(entry);
     }
-
+    
     function isToday(date) {
         const today = new Date();
         return date.getDate() === today.getDate() &&
@@ -463,9 +445,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyTheme(themeName) {
         body.className = '';
         body.classList.add(themeName);
-        if (localStorage.getItem('emojis_enabled') === 'false') {
-            body.classList.add('emojis-disabled');
-        }
     }
 
     function checkPin() {
@@ -592,6 +571,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 request.onerror = reject;
             });
             for (const diary of data.diaries) {
+                // Garante que a propriedade emojisEnabled exista para dados importados antigos
+                if (diary.emojisEnabled === undefined) {
+                    diary.emojisEnabled = true;
+                }
                 await new Promise((resolve, reject) => {
                     const request = diaryTx.objectStore('diaries').put(diary);
                     request.onsuccess = resolve;
@@ -644,7 +627,6 @@ document.addEventListener('DOMContentLoaded', () => {
         prevPageBtn.addEventListener('click', prevPage);
         nextPageBtn.addEventListener('click', nextPage);
         pageContentEl.addEventListener('keyup', debouncedSave);
-        emojiToggle.addEventListener('change', (e) => toggleEmojiVisibility(e.target.checked));
         moodOptions.addEventListener('click', (e) => {
             if (e.target.classList.contains('mood')) {
                 updateMoodSelection(e.target.dataset.mood);
