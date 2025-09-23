@@ -38,6 +38,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalInput = document.getElementById('modal-input');
     const modalOkBtn = document.getElementById('modal-ok-btn');
     const modalCancelBtn = document.getElementById('modal-cancel-btn');
+    const calendarOverlay = document.getElementById('calendar-overlay');
+    const calendarModal = document.getElementById('calendar-modal');
+    const calendarMonthYear = document.getElementById('calendar-month-year');
+    const calendarPrevMonthBtn = document.getElementById('calendar-prev-month');
+    const calendarNextMonthBtn = document.getElementById('calendar-next-month');
+    const calendarDaysGrid = document.getElementById('calendar-days-grid');
+    const calendarCancelBtn = document.getElementById('calendar-cancel-btn');
+    const calendarSelectBtn = document.getElementById('calendar-select-btn');
+
 
     // --- ESTADO DA APLICAÇÃO ---
     let db;
@@ -46,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentDate = new Date();
     let currentMood = null;
     let pinInput = '';
+    let calendarCurrentDate = new Date();
+    let calendarSelectedDate = new Date();
 
     // --- LÓGICA DE MODAL CUSTOMIZADO ---
     const customModal = (title, text, options = {}) => {
@@ -91,33 +102,93 @@ document.addEventListener('DOMContentLoaded', () => {
     const customConfirm = (text, title = "Confirmação") => customModal(title, text, { confirm: true, okText: 'Confirmar' });
     const customPrompt = (text, title = "Entrada") => customModal(title, text, { prompt: true });
 
+    // --- LÓGICA DO CALENDÁRIO CUSTOMIZADO ---
+    function renderCalendar(year, month) {
+        calendarCurrentDate = new Date(year, month, 1);
+        const monthName = calendarCurrentDate.toLocaleString('pt-BR', { month: 'long' });
+        calendarMonthYear.textContent = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${year}`;
+
+        calendarDaysGrid.innerHTML = '';
+        const firstDayOfMonth = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        for (let i = 0; i < firstDayOfMonth; i++) {
+            const emptyCell = document.createElement('div');
+            calendarDaysGrid.appendChild(emptyCell);
+        }
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const dayCell = document.createElement('div');
+            dayCell.className = 'day';
+            dayCell.textContent = i;
+            const cellDate = new Date(year, month, i);
+
+            if (isSameDay(cellDate, new Date())) {
+                dayCell.classList.add('today');
+            }
+            if (isSameDay(cellDate, calendarSelectedDate)) {
+                dayCell.classList.add('selected');
+            }
+            dayCell.onclick = () => {
+                calendarSelectedDate = new Date(year, month, i);
+                renderCalendar(year, month);
+            };
+            calendarDaysGrid.appendChild(dayCell);
+        }
+    }
+
+    function isSameDay(date1, date2) {
+        return date1.getFullYear() === date2.getFullYear() &&
+               date1.getMonth() === date2.getMonth() &&
+               date1.getDate() === date2.getDate();
+    }
+    
+    const showCalendarPicker = (initialDate = new Date()) => {
+        calendarSelectedDate = initialDate;
+        renderCalendar(initialDate.getFullYear(), initialDate.getMonth());
+        calendarOverlay.classList.add('visible');
+
+        return new Promise(resolve => {
+            const onSelect = () => { cleanup(); resolve(calendarSelectedDate); };
+            const onCancel = () => { cleanup(); resolve(null); };
+            const onPrev = () => renderCalendar(calendarCurrentDate.getFullYear(), calendarCurrentDate.getMonth() - 1);
+            const onNext = () => renderCalendar(calendarCurrentDate.getFullYear(), calendarCurrentDate.getMonth() + 1);
+
+            calendarSelectBtn.onclick = onSelect;
+            calendarCancelBtn.onclick = onCancel;
+            calendarPrevMonthBtn.onclick = onPrev;
+            calendarNextMonthBtn.onclick = onNext;
+
+            function cleanup() {
+                calendarOverlay.classList.remove('visible');
+                calendarSelectBtn.onclick = null;
+                calendarCancelBtn.onclick = null;
+                calendarPrevMonthBtn.onclick = null;
+                calendarNextMonthBtn.onclick = null;
+            }
+        });
+    };
+
     // --- INICIALIZAÇÃO E DB ---
     function initDB() {
-        const request = indexedDB.open('DiarioPWA_DB', 3);
-        
-        request.onerror = (event) => {
-            console.error('Erro ao abrir o banco de dados:', event.target.error);
-        };
+        const request = indexedDB.open('DiarioPWA_DB', 4);
+        request.onerror = (event) => console.error('Erro:', event.target.error);
 
         request.onupgradeneeded = (event) => {
-            console.log("Atualizando o banco de dados...");
             db = event.target.result;
             const oldVersion = event.oldVersion;
             const transaction = event.target.transaction;
-
+            
             if (oldVersion < 1) {
-                console.log("Criando objectStore 'diaries'");
                 db.createObjectStore('diaries', { keyPath: 'id', autoIncrement: true });
             }
             if (oldVersion < 2) {
-                console.log("Criando objectStore 'entries'");
                 if (!db.objectStoreNames.contains('entries')) {
                     const entriesStore = db.createObjectStore('entries', { keyPath: ['diaryId', 'date'] });
                     entriesStore.createIndex('diaryId_idx', 'diaryId', { unique: false });
                 }
             }
             if (oldVersion < 3) {
-                console.log("Atualizando 'diaries' para a versão 3");
                 if (transaction.objectStoreNames.contains('diaries')) {
                     const diariesStore = transaction.objectStore('diaries');
                     diariesStore.openCursor().onsuccess = (e) => {
@@ -133,10 +204,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
                 }
             }
+             if (oldVersion < 4) {
+                if (transaction.objectStoreNames.contains('diaries')) {
+                    const diariesStore = transaction.objectStore('diaries');
+                    diariesStore.openCursor().onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                            const book = cursor.value;
+                            if (!book.startDate) {
+                                book.startDate = new Date().toISOString().split('T')[0];
+                            }
+                            cursor.update(book);
+                            cursor.continue();
+                        }
+                    };
+                }
+            }
         };
-
         request.onsuccess = (event) => {
-            console.log("Banco de dados aberto com sucesso.");
             db = event.target.result;
             checkPin();
         };
@@ -198,11 +283,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!db || !bookName) return;
 
         const emojisEnabled = await customConfirm("Deseja habilitar o registro de humor (emojis) para este livro?", "Novo Livro");
+        
+        const startDate = await showCalendarPicker(new Date());
+        if (startDate === null) {
+            return;
+        }
 
         const transaction = db.transaction('diaries', 'readwrite');
         const newBook = { 
             name: bookName,
-            emojisEnabled: emojisEnabled 
+            emojisEnabled: emojisEnabled,
+            startDate: startDate.toISOString().split('T')[0]
         };
         await new Promise(r => transaction.objectStore('diaries').add(newBook).onsuccess = e => {
             currentBookId = e.target.result;
@@ -324,28 +415,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function findFirstWrittenPage(bookId) {
-        return new Promise((resolve) => {
-            if (!bookId) { resolve(null); return; }
-            const transaction = db.transaction('entries', 'readonly');
-            const store = transaction.objectStore('entries');
-            const range = IDBKeyRange.bound([Number(bookId), ''], [Number(bookId), 'z']);
-            const request = store.openCursor(range, 'next');
-            let found = false;
-            request.onsuccess = event => {
-                const cursor = event.target.result;
-                if (cursor) {
-                    const entry = cursor.value;
-                    if (entry.content && entry.content.trim() !== '') {
-                        found = true;
-                        resolve(new Date(entry.date.replace(/-/g, '/')));
-                    } else { cursor.continue(); }
-                } else if (!found) { resolve(null); }
-            };
-            request.onerror = () => resolve(null);
-        });
-    }
-
     async function openBook() {
         if (!currentBookId) {
             await customAlert("Crie ou selecione um livro primeiro.");
@@ -390,11 +459,12 @@ document.addEventListener('DOMContentLoaded', () => {
         currentDay.setHours(0, 0, 0, 0);
 
         nextPageBtn.disabled = currentDay >= today;
-
-        // ** AQUI ESTÁ A MUDANÇA DE VOLTA **
-        // Procura a primeira página escrita. Se não houver, o limite é o dia de hoje.
-        const firstWrittenDate = await findFirstWrittenPage(currentBookId);
-        const limitDate = firstWrittenDate || new Date();
+        
+        let limitDate = new Date();
+        if (currentBookData && currentBookData.startDate) {
+            limitDate = new Date(currentBookData.startDate.replace(/-/g, '/'));
+        }
+        
         const limitDay = new Date(limitDate);
         limitDay.setHours(0, 0, 0, 0);
         
@@ -559,7 +629,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 navigateToDate(entry.date.replace(/-/g, '/'));
             };
             searchResultsEl.appendChild(li);
-        });
+        }
+        );
     }
 
     async function exportData() {
@@ -602,6 +673,9 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const diary of data.diaries) {
                 if (diary.emojisEnabled === undefined) {
                     diary.emojisEnabled = true;
+                }
+                if (diary.startDate === undefined) {
+                    diary.startDate = new Date().toISOString().split('T')[0];
                 }
                 await new Promise((resolve, reject) => {
                     const request = diaryTx.objectStore('diaries').put(diary);
