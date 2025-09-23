@@ -324,6 +324,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function findFirstWrittenPage(bookId) {
+        return new Promise((resolve) => {
+            if (!bookId) { resolve(null); return; }
+            const transaction = db.transaction('entries', 'readonly');
+            const store = transaction.objectStore('entries');
+            const range = IDBKeyRange.bound([Number(bookId), ''], [Number(bookId), 'z']);
+            const request = store.openCursor(range, 'next');
+            let found = false;
+            request.onsuccess = event => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const entry = cursor.value;
+                    if (entry.content && entry.content.trim() !== '') {
+                        found = true;
+                        resolve(new Date(entry.date.replace(/-/g, '/')));
+                    } else { cursor.continue(); }
+                } else if (!found) { resolve(null); }
+            };
+            request.onerror = () => resolve(null);
+        });
+    }
+
     async function openBook() {
         if (!currentBookId) {
             await customAlert("Crie ou selecione um livro primeiro.");
@@ -369,13 +391,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         nextPageBtn.disabled = currentDay >= today;
 
-        // ** AQUI ESTÁ A MUDANÇA **
-        // Define a data de início fixa do diário.
-        const diaryStartDate = new Date('2025-09-21T00:00:00');
-        diaryStartDate.setHours(0, 0, 0, 0);
-
-        // Desabilita o botão se a página atual for igual ou anterior à data de início.
-        prevPageBtn.disabled = currentDay <= diaryStartDate;
+        // ** AQUI ESTÁ A MUDANÇA DE VOLTA **
+        // Procura a primeira página escrita. Se não houver, o limite é o dia de hoje.
+        const firstWrittenDate = await findFirstWrittenPage(currentBookId);
+        const limitDate = firstWrittenDate || new Date();
+        const limitDay = new Date(limitDate);
+        limitDay.setHours(0, 0, 0, 0);
+        
+        prevPageBtn.disabled = currentDay <= limitDay;
     }
     
     async function navigateToDate(date) {
