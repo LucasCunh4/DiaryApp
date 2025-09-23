@@ -1,5 +1,5 @@
 // Define o nome e a versão do cache
-const CACHE_NAME = 'livros-pwa-cache-v2';
+const CACHE_NAME = 'livros-pwa-cache-v3';
 
 // Lista de arquivos e recursos essenciais para o funcionamento offline
 const urlsToCache = [
