@@ -506,7 +506,7 @@ header {
     cursor: not-allowed;
 }
 
-/* --- Estilos do Modal Customizado --- */
+/* --- Estilos do Modal Genérico e do Calendário --- */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -546,6 +546,7 @@ header {
     margin-top: 0;
     margin-bottom: 15px;
     color: var(--cover-color);
+    text-align: center;
 }
 .modal p {
     font-family: var(--font-serif);
@@ -564,6 +565,7 @@ header {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+    margin-top: 20px;
 }
 .modal-btn {
     padding: 10px 20px;
@@ -584,4 +586,60 @@ header {
 .modal-btn.secondary {
     background-color: #ccc;
     color: #333;
+}
+
+.calendar {
+    margin-top: 15px;
+}
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+#calendar-month-year {
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+.calendar-nav-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-color);
+    padding: 0 10px;
+}
+.calendar-week-days, .calendar-days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+}
+.calendar-week-days {
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #888;
+}
+.calendar-days-grid .day {
+    padding: 5px;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background-color 0.2s, color 0.2s;
+}
+.calendar-days-grid .day.other-month {
+    opacity: 0.3;
+}
+.calendar-days-grid .day:not(.other-month):hover {
+    background-color: #eee;
+}
+.calendar-days-grid .day.today {
+    border: 2px solid var(--cover-color);
+}
+.calendar-days-grid .day.selected {
+    background-color: var(--cover-color);
+    color: var(--header-text);
+    font-weight: bold;
 }
