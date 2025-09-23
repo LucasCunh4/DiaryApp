@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- ESTADO DA APLICAÇÃO ---
     let db;
     let currentBookId = localStorage.getItem('currentBookId') || null;
-    let currentBookData = null; // Armazena os dados do livro atual, incluindo a config de emoji
+    let currentBookData = null;
     let currentDate = new Date();
     let currentMood = null;
     let pinInput = '';
@@ -91,41 +91,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const customConfirm = (text, title = "Confirmação") => customModal(title, text, { confirm: true, okText: 'Confirmar' });
     const customPrompt = (text, title = "Entrada") => customModal(title, text, { prompt: true });
 
-    // --- INICIALIZAÇÃO E DB ---
+    // --- INICIALIZAÇÃO E DB (COM CORREÇÃO) ---
     function initDB() {
-        const request = indexedDB.open('DiarioPWA_DB', 3); // <-- VERSÃO ATUALIZADA
+        const request = indexedDB.open('DiarioPWA_DB', 3);
+        
         request.onerror = (event) => {
             console.error('Erro ao abrir o banco de dados:', event.target.error);
         };
+
         request.onupgradeneeded = (event) => {
+            console.log("Atualizando o banco de dados...");
             db = event.target.result;
             const oldVersion = event.oldVersion;
             const transaction = event.target.transaction;
-            
+
             if (oldVersion < 1) {
+                console.log("Criando objectStore 'diaries'");
                 db.createObjectStore('diaries', { keyPath: 'id', autoIncrement: true });
             }
             if (oldVersion < 2) {
+                console.log("Criando objectStore 'entries'");
                 if (!db.objectStoreNames.contains('entries')) {
                     const entriesStore = db.createObjectStore('entries', { keyPath: ['diaryId', 'date'] });
                     entriesStore.createIndex('diaryId_idx', 'diaryId', { unique: false });
                 }
             }
             if (oldVersion < 3) {
-                // Adiciona a propriedade emojisEnabled para livros existentes
-                const diariesStore = transaction.objectStore('diaries');
-                diariesStore.openCursor().onsuccess = (e) => {
-                    const cursor = e.target.result;
-                    if (cursor) {
-                        const book = cursor.value;
-                        book.emojisEnabled = true; // Habilita por padrão para livros antigos
-                        cursor.update(book);
-                        cursor.continue();
-                    }
-                };
+                console.log("Atualizando 'diaries' para a versão 3");
+                if (transaction.objectStoreNames.contains('diaries')) {
+                    const diariesStore = transaction.objectStore('diaries');
+                    diariesStore.openCursor().onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                            const book = cursor.value;
+                            if (book.emojisEnabled === undefined) {
+                                book.emojisEnabled = true;
+                            }
+                            cursor.update(book);
+                            cursor.continue();
+                        }
+                    };
+                }
             }
         };
+
         request.onsuccess = (event) => {
+            console.log("Banco de dados aberto com sucesso.");
             db = event.target.result;
             checkPin();
         };
@@ -150,12 +161,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         allBooks.forEach(book => {
             const li = document.createElement('li');
-            
             const bookNameSpan = document.createElement('span');
             bookNameSpan.className = 'book-name';
             bookNameSpan.textContent = book.name;
             bookNameSpan.onclick = () => selectBook(book.id);
-            
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-book-btn';
             deleteBtn.innerHTML = '&#128465;';
@@ -164,7 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 deleteBook(book.id, book.name);
             };
-
             li.appendChild(bookNameSpan);
             li.appendChild(deleteBtn);
             li.dataset.id = book.id;
@@ -260,7 +268,6 @@ document.addEventListener('DOMContentLoaded', () => {
         pageMoodEl.textContent = entry ? entry.mood || '' : '';
         updateMoodSelection(entry ? entry.mood : null);
         
-        // Controla a visibilidade dos emojis baseado na configuração do livro
         const showEmojis = currentBookData && currentBookData.emojisEnabled;
         moodTrackerEl.style.display = showEmojis ? 'block' : 'none';
         pageMoodEl.style.display = showEmojis ? 'block' : 'none';
@@ -317,13 +324,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function findFirstWrittenPage(bookId) {
+        return new Promise((resolve) => {
+            if (!bookId) { resolve(null); return; }
+            const transaction = db.transaction('entries', 'readonly');
+            const store = transaction.objectStore('entries');
+            const range = IDBKeyRange.bound([Number(bookId), ''], [Number(bookId), 'z']);
+            const request = store.openCursor(range, 'next');
+            let found = false;
+            request.onsuccess = event => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const entry = cursor.value;
+                    if (entry.content && entry.content.trim() !== '') {
+                        found = true;
+                        resolve(new Date(entry.date.replace(/-/g, '/')));
+                    } else { cursor.continue(); }
+                } else if (!found) { resolve(null); }
+            };
+            request.onerror = () => resolve(null);
+        });
+    }
+
     async function openBook() {
         if (!currentBookId) {
             await customAlert("Crie ou selecione um livro primeiro.");
             return;
         }
         
-        currentDate = new Date(); // Sempre abre no dia de hoje
+        currentDate = new Date();
         
         await loadPage(currentDate);
         
@@ -360,7 +389,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentDay = new Date(currentDate);
         currentDay.setHours(0, 0, 0, 0);
 
-        // O botão "Próxima" é desabilitado se a página atual for hoje ou um dia futuro.
         nextPageBtn.disabled = currentDay >= today;
 
         const firstWrittenDate = await findFirstWrittenPage(currentBookId);
@@ -379,8 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
             openBook();
         }
     }
-
-    // --- FUNÇÕES DE DADOS E UTILITÁRIAS ---
+    
     function getEntry(date) {
         return new Promise((resolve) => {
             const dateString = date.toISOString().split('T')[0];
@@ -571,7 +598,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 request.onerror = reject;
             });
             for (const diary of data.diaries) {
-                // Garante que a propriedade emojisEnabled exista para dados importados antigos
                 if (diary.emojisEnabled === undefined) {
                     diary.emojisEnabled = true;
                 }
